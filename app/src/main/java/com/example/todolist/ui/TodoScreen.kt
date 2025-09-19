@@ -42,6 +42,19 @@ import com.example.todolist.TodoViewModel
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api // Import this
 import androidx.compose.material3.MaterialTheme
+import org.burnoutcrew.reorderable.ReorderableItem
+import org.burnoutcrew.reorderable.rememberReorderableLazyListState
+import org.burnoutcrew.reorderable.detectReorderAfterLongPress
+import org.burnoutcrew.reorderable.reorderable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun TodoScreen(
 	modifier: Modifier = Modifier,
@@ -67,7 +80,8 @@ fun TodoScreen(
 				TodoList(
 					items = viewModel.items,
 					onToggle = viewModel::toggleDone,
-					onRemove = viewModel::removeItem
+					onRemove = viewModel::removeItem,
+					onMove = viewModel::moveItem
 				)
 			}
 		}
@@ -107,11 +121,18 @@ private fun AddItemRow(
 private fun TodoList(
 	items: List<TodoItem>,
 	onToggle: (Long) -> Unit,
-	onRemove: (Long) -> Unit
+	onRemove: (Long) -> Unit,
+	onMove: (Int, Int) -> Unit
 ) {
+	val state = rememberReorderableLazyListState(onMove = { from, to ->
+		onMove(from.index, to.index)
+	})
+
 	if (items.isEmpty()) {
 		Column(
-			modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(top = 32.dp),
 			horizontalAlignment = Alignment.CenterHorizontally,
 			verticalArrangement = Arrangement.Center
 		) {
@@ -122,48 +143,65 @@ private fun TodoList(
 		}
 		return
 	}
-	LazyColumn {
+
+	LazyColumn(
+		state = state.listState,
+		modifier = Modifier
+			.fillMaxSize()
+			.reorderable(state)
+			.detectReorderAfterLongPress(state)
+	) {
 		items(items, key = { it.id }) { item ->
-			TodoRow(item = item, onToggle = onToggle, onRemove = onRemove)
+			ReorderableItem(state, key = item.id) { isDragging ->
+				TodoRow(item = item, onToggle = onToggle, onRemove = onRemove, isDragging = isDragging)
+			}
 			Divider()
 		}
 	}
+
 }
+
 
 @Composable
 private fun TodoRow(
 	item: TodoItem,
 	onToggle: (Long) -> Unit,
-	onRemove: (Long) -> Unit
+	onRemove: (Long) -> Unit,
+	isDragging: Boolean // <-- pass from ReorderableItem
 ) {
+	// Animate scale and elevation while dragging
+	val scale by animateFloatAsState(targetValue = if (isDragging) 1.05f else 1f, tween(150))
+	val elevation by animateDpAsState(targetValue = if (isDragging) 8.dp else 0.dp, tween(150))
+	val alpha by animateFloatAsState(targetValue = if (isDragging) 0.95f else 1f, tween(150))
+
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(vertical = 8.dp),
+			.padding(vertical = 4.dp)
+			.scale(scale)
+			.zIndex(if (isDragging) 1f else 0f)
+			.background(
+				color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+				shape = RoundedCornerShape(8.dp)
+			)
+			.padding(8.dp),
 		verticalAlignment = Alignment.CenterVertically
 	) {
 		Checkbox(
 			checked = item.isDone,
-			onCheckedChange = { onToggle(item.id) },
-			colors = CheckboxDefaults.colors(
-				checkedColor = MaterialTheme.colorScheme.primary,
-				uncheckedColor = MaterialTheme.colorScheme.outline,
-				checkmarkColor = MaterialTheme.colorScheme.onPrimary
-			)
+			onCheckedChange = { onToggle(item.id) }
 		)
 		Text(
 			text = item.title,
-			modifier = Modifier.weight(1f).padding(start = 8.dp),
+			modifier = Modifier
+				.weight(1f)
+				.padding(start = 8.dp),
 			textDecoration = if (item.isDone) TextDecoration.LineThrough else TextDecoration.None
 		)
 		FilledTonalIconButton(
-			colors = IconButtonDefaults.filledTonalIconButtonColors(
-				containerColor = MaterialTheme.colorScheme.errorContainer,
-				contentColor = MaterialTheme.colorScheme.onErrorContainer
-			),
 			onClick = { onRemove(item.id) }
 		) {
 			Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete task")
 		}
 	}
-} 
+}

@@ -35,4 +35,11 @@ class TodoViewModel : ViewModel() {
 	fun removeItem(id: Long) {
 		_items.removeAll { it.id == id }
 	}
+	fun moveItem(fromIndex: Int, toIndex: Int) {
+		if (fromIndex in _items.indices && toIndex in _items.indices) {
+			val item = _items.removeAt(fromIndex)
+			_items.add(toIndex, item)
+		}
+	}
+
 } 
